@@ -1,0 +1,142 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agv-forge.com/schemas/system2.base.schema.json",
+  "title": "AGV Forge System 2 - Base Envelope",
+  "description": "Shared envelope for all System 2 planner outputs. Routes to specific child schemas based on content_mode.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "system_id",
+    "content_mode",
+    "production_mode",
+    "reference_mode",
+    "flow_build_mode",
+    "language",
+    "title",
+    "thumbnail_prompt",
+    "global_hook",
+    "voice_plan",
+    "blocks",
+    "quality_flags"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "system2.v1",
+      "description": "Fixed version identifier for System 2 schema family."
+    },
+    "system_id": {
+      "type": "string",
+      "const": "system2",
+      "description": "Identifier to distinguish from System 1 pipeline."
+    },
+    "content_mode": {
+      "type": "string",
+      "enum": ["cinematic_story_video", "knowledge_explainer_video"],
+      "description": "Determines which child schema to apply."
+    },
+    "production_mode": {
+      "type": "string",
+      "enum": ["continuous_story_mode", "hooked_summary_mode"],
+      "description": "Structural layout of the video."
+    },
+    "reference_mode": {
+      "type": "string",
+      "enum": ["exact_reference_mode", "component_reference_mode", "sequential_reference_mode"],
+      "description": "Strategy for using reference assets in Flow generation."
+    },
+    "flow_build_mode": {
+      "type": "string",
+      "enum": ["single_scene_generation", "scene_builder_mode"],
+      "description": "Operation mode for Flow Automation Adapter."
+    },
+    "language": {
+      "type": "string",
+      "minLength": 2,
+      "description": "Primary language code (e.g., 'vi', 'en')."
+    },
+    "title": {
+      "type": "string",
+      "description": "Video title."
+    },
+    "thumbnail_text": {
+      "type": "string",
+      "description": "Overlay text for thumbnail or opening."
+    },
+    "thumbnail_prompt": {
+      "$ref": "#/definitions/thumbnail_prompt"
+    },
+    "global_hook": {
+      "$ref": "#/definitions/global_hook"
+    },
+    "voice_plan": {
+      "$ref": "#/definitions/voice_plan"
+    },
+    "blocks": {
+      "type": "array",
+      "description": "High-level content blocks (structure varies by child schema).",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["block_id", "block_type"],
+        "properties": {
+          "block_id": { "type": "string" },
+          "block_type": { "type": "string" }
+        }
+      }
+    },
+    "quality_flags": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["level", "code", "message"],
+        "properties": {
+          "level": { "type": "string", "enum": ["info", "warning", "error"] },
+          "code": { "type": "string" },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "thumbnail_prompt": {
+      "type": "object",
+      "required": ["asset_id", "asset_name", "prompt", "aspect_ratio"],
+      "properties": {
+        "asset_id": { "type": "string" },
+        "asset_name": { "type": "string" },
+        "prompt": { "type": "string" },
+        "aspect_ratio": { "type": "string", "enum": ["16:9", "9:16", "1:1"] },
+        "style_notes": { "type": "string" }
+      }
+    },
+    "global_hook": {
+      "type": "object",
+      "required": ["text", "start_ms", "end_ms"],
+      "properties": {
+        "text": { "type": "string" },
+        "start_ms": { "type": "integer", "minimum": 0 },
+        "end_ms": { "type": "integer", "minimum": 0 },
+        "visual_type": { "type": "string" },
+        "visual_asset_id": { "type": "string" },
+        "visual_notes": { "type": "string" }
+      }
+    },
+    "voice_plan": {
+      "type": "object",
+      "required": ["audio_mode", "voice_strategy", "narrator_voice_profile_id", "character_voice_enabled"],
+      "properties": {
+        "audio_mode": {
+          "type": "string",
+          "enum": ["trained_brand_voice", "manual_audio_import", "skip_voice"]
+        },
+        "voice_strategy": {
+          "type": "string",
+          "enum": ["single_narrator_only", "narrator_plus_key_characters", "full_character_cast"]
+        },
+        "narrator_voice_profile_id": { "type": "string" },
+        "character_voice_enabled": { "type": "boolean" }
+      }
+    }
+  }
+}

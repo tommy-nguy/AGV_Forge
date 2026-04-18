@@ -1,0 +1,24 @@
+# Foundation
+python-dotenv>=1.0.0
+structlog>=24.1.0
+
+# Planner
+google-generativeai>=0.7.0
+jsonschema>=4.20.0
+
+# Voice
+pydub>=0.25.1
+requests>=2.31.0
+
+# Ingest & Transcript
+openai-whisper>=20231117
+
+# Image & Render
+moviepy>=1.0.3
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# Publish
+google-api-python-client>=2.100.0
+google-auth-httplib2>=0.1.0
+google-auth-oauthlib>=1.0.0

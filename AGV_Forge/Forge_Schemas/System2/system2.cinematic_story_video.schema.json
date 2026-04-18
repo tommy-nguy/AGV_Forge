@@ -1,0 +1,182 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agv-forge.com/schemas/system2.cinematic_story_video.schema.json",
+  "title": "AGV Forge System 2 - Cinematic Story Video Schema",
+  "description": "Schema for story-driven, multi-character, dialogue-heavy videos.",
+  "type": "object",
+  "allOf": [
+    { "$ref": "system2.base.schema.json" },
+    {
+      "properties": {
+        "content_mode": { "const": "cinematic_story_video" },
+        "character_registry": {
+          "type": "array",
+          "description": "Registry of all characters appearing in the video.",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/character_entry" }
+        },
+        "blocks": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/cinematic_block" }
+        }
+      },
+      "required": ["character_registry"]
+    }
+  ],
+  "definitions": {
+    "character_entry": {
+      "type": "object",
+      "required": [
+        "character_id",
+        "character_name",
+        "role_type",
+        "voice_profile_id",
+        "default_tone",
+        "default_speed",
+        "default_pitch",
+        "emotion_range",
+        "is_narrator"
+      ],
+      "properties": {
+        "character_id": { "type": "string" },
+        "character_name": { "type": "string" },
+        "role_type": { "type": "string", "enum": ["main_character", "supporting_character", "narrator", "antagonist"] },
+        "voice_profile_id": { "type": "string" },
+        "backup_voice_profile_id": { "type": "string" },
+        "default_tone": { "type": "string" },
+        "default_speed": { "type": "number", "minimum": 0.5, "maximum": 2.0 },
+        "default_pitch": { "type": "string" },
+        "emotion_range": { "type": "array", "items": { "type": "string" } },
+        "is_narrator": { "type": "boolean" }
+      }
+    },
+    "cinematic_block": {
+      "type": "object",
+      "required": ["block_id", "block_type", "scenes"],
+      "properties": {
+        "block_id": { "type": "string" },
+        "block_type": { "type": "string", "enum": ["intro", "story_flow", "climax", "ending", "cta"] },
+        "block_title": { "type": "string" },
+        "scenes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/cinematic_scene" }
+        }
+      }
+    },
+    "cinematic_scene": {
+      "type": "object",
+      "required": [
+        "scene_id",
+        "scene_order",
+        "scene_purpose",
+        "asset_name",
+        "reference_mode",
+        "flow_build_mode",
+        "prompt_7_elements",
+        "continuity_notes",
+        "scene_transition_notes",
+        "start_ms",
+        "end_ms",
+        "transition_to_next"
+      ],
+      "properties": {
+        "scene_id": { "type": "string" },
+        "scene_order": { "type": "integer", "minimum": 1 },
+        "scene_purpose": {
+          "type": "string",
+          "enum": ["hook", "establishing", "dialogue", "reveal", "emotion_peak", "explanation", "transition", "ending"]
+        },
+        "asset_name": { "type": "string" },
+        "reference_mode": { "$ref": "system2.base.schema.json#/properties/reference_mode" },
+        "flow_build_mode": { "$ref": "system2.base.schema.json#/properties/flow_build_mode" },
+        "reference_asset_ids": { "type": "array", "items": { "type": "string" } },
+        "continuity_notes": { "type": "string", "description": "Instructions to maintain visual consistency with previous scenes." },
+        "scene_transition_notes": { "type": "string" },
+        "prompt_7_elements": { "$ref": "#/definitions/prompt_7_elements" },
+        "dialogue_segments": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/dialogue_segment" }
+        },
+        "narration_text": { "type": "string" },
+        "start_ms": { "type": "integer", "minimum": 0 },
+        "end_ms": { "type": "integer", "minimum": 0 },
+        "transition_to_next": { "type": "string", "default": "cut" }
+      }
+    },
+    "prompt_7_elements": {
+      "type": "object",
+      "required": ["subject", "environment", "action", "camera", "aesthetics", "technical_constraints", "sound_design"],
+      "properties": {
+        "subject": { "type": "string" },
+        "environment": { "type": "string" },
+        "action": { "type": "string" },
+        "camera": {
+          "type": "object",
+          "required": ["angle", "lens_mm", "framing"],
+          "properties": {
+            "angle": { "type": "string" },
+            "lens_mm": { "type": "string" },
+            "framing": { "type": "string" }
+          }
+        },
+        "aesthetics": {
+          "type": "object",
+          "required": ["style", "color_tone", "cinematic_notes"],
+          "properties": {
+            "style": { "type": "string" },
+            "color_tone": { "type": "string" },
+            "cinematic_notes": { "type": "string" }
+          }
+        },
+        "technical_constraints": {
+          "type": "object",
+          "required": ["aspect_ratio", "negative_prompt"],
+          "properties": {
+            "aspect_ratio": { "type": "string" },
+            "resolution_hint": { "type": "string" },
+            "negative_prompt": { "type": "string" }
+          }
+        },
+        "sound_design": {
+          "type": "object",
+          "required": ["dialogue_hint", "ambient_sound", "sfx"],
+          "properties": {
+            "dialogue_hint": { "type": "string" },
+            "ambient_sound": { "type": "string" },
+            "sfx": { "type": "string" }
+          }
+        }
+      }
+    },
+    "dialogue_segment": {
+      "type": "object",
+      "required": [
+        "segment_id",
+        "scene_id",
+        "speaker_type",
+        "character_id",
+        "speech_type",
+        "text",
+        "emotion",
+        "intensity",
+        "delivery_style",
+        "start_ms",
+        "end_ms"
+      ],
+      "properties": {
+        "segment_id": { "type": "string" },
+        "scene_id": { "type": "string" },
+        "speaker_type": { "type": "string", "enum": ["narrator", "character"] },
+        "character_id": { "type": "string" },
+        "speech_type": { "type": "string", "enum": ["narration", "spoken_dialogue", "inner_thought"] },
+        "text": { "type": "string" },
+        "emotion": { "type": "string" },
+        "intensity": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "delivery_style": { "type": "string" },
+        "start_ms": { "type": "integer", "minimum": 0 },
+        "end_ms": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

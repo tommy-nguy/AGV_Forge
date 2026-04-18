@@ -1,0 +1,134 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agv-forge.com/schemas/planner_output_v1.schema.json",
+  "title": "AGV Forge System 1 Planner Output",
+  "type": "object",
+  "required": ["title", "thumbnail_prompt", "hook", "content_script", "voice_style", "image_prompts", "edit_timeline"],
+  "properties": {
+    "title": {"type": "string"},
+    "thumbnail_text": {"type": "string"},
+    "thumbnail_prompt": {
+      "type": "object",
+      "required": ["asset_id", "prompt", "aspect_ratio"],
+      "properties": {
+        "asset_id": {"type": "string"},
+        "asset_name": {"type": "string"},
+        "prompt": {"type": "string"},
+        "aspect_ratio": {"type": "string", "enum": ["16:9", "9:16", "1:1"]},
+        "style_notes": {"type": "string"}
+      }
+    },
+    "caption": {"type": "string"},
+    "content_summary": {"type": "string"},
+    "content_angle": {"type": "string"},
+    "hook": {
+      "type": "object",
+      "required": ["text", "start_ms", "end_ms"],
+      "properties": {
+        "text": {"type": "string"},
+        "start_ms": {"type": "integer", "minimum": 0},
+        "end_ms": {"type": "integer", "minimum": 0},
+        "visual_type": {"type": "string"},
+        "visual_asset_id": {"type": "string"},
+        "visual_notes": {"type": "string"}
+      }
+    },
+    "content_script": {
+      "type": "object",
+      "required": ["full_text", "segments"],
+      "properties": {
+        "full_text": {"type": "string"},
+        "segments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["segment_id", "purpose", "text", "start_ms", "end_ms"],
+            "properties": {
+              "segment_id": {"type": "string"},
+              "purpose": {"type": "string"},
+              "text": {"type": "string"},
+              "start_ms": {"type": "integer", "minimum": 0},
+              "end_ms": {"type": "integer", "minimum": 0}
+            }
+          }
+        }
+      }
+    },
+    "voice_style": {
+      "type": "object",
+      "required": ["mode", "provider", "voice_profile_id"],
+      "properties": {
+        "mode": {"type": "string", "enum": ["trained_brand_voice", "manual_audio_import", "skip_voice"]},
+        "provider": {"type": "string"},
+        "voice_profile_id": {"type": "string"},
+        "tone": {"type": "string"},
+        "speed": {"type": "number", "minimum": 0.5, "maximum": 2.0},
+        "emotion": {"type": "string"},
+        "pitch": {"type": "string"},
+        "pause_style": {"type": "string"}
+      }
+    },
+    "image_prompts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["asset_id", "for_segment_id", "prompt", "aspect_ratio", "start_ms", "end_ms"],
+        "properties": {
+          "asset_id": {"type": "string"},
+          "asset_name": {"type": "string"},
+          "for_segment_id": {"type": "string"},
+          "prompt": {"type": "string"},
+          "negative_prompt": {"type": "string"},
+          "aspect_ratio": {"type": "string"},
+          "style_notes": {"type": "string"},
+          "start_ms": {"type": "integer", "minimum": 0},
+          "end_ms": {"type": "integer", "minimum": 0},
+          "position": {"type": "string"},
+          "layer": {"type": "integer"},
+          "purpose": {"type": "string"}
+        }
+      }
+    },
+    "edit_direction": {
+      "type": "object",
+      "properties": {
+        "editing_mode": {"type": "string", "enum": ["basic", "semi_smart", "context_aware"]},
+        "pace": {"type": "string"},
+        "notes": {"type": "string"}
+      }
+    },
+    "edit_timeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step_id", "type", "timeline_start_ms", "timeline_end_ms", "layer"],
+        "properties": {
+          "step_id": {"type": "string"},
+          "type": {"type": "string"},
+          "source_asset": {"type": "string"},
+          "source_start_ms": {"type": "integer"},
+          "source_end_ms": {"type": "integer"},
+          "timeline_start_ms": {"type": "integer", "minimum": 0},
+          "timeline_end_ms": {"type": "integer", "minimum": 0},
+          "layer": {"type": "integer"},
+          "purpose": {"type": "string"},
+          "params": {"type": "object"}
+        }
+      }
+    },
+    "cta_script": {"type": "string"},
+    "publish_metadata": {
+      "type": "object",
+      "properties": {
+        "platforms": {"type": "array", "items": {"type": "string"}},
+        "review_script": {"type": "boolean"},
+        "review_final_video": {"type": "boolean"},
+        "auto_publish": {"type": "boolean"},
+        "schedule_at": {"type": "string", "format": "date-time"},
+        "timezone": {"type": "string"},
+        "batch_interval_hours": {"type": "integer"}
+      }
+    },
+    "quality_flags": {"type": "array"}
+  }
+}

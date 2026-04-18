@@ -1,0 +1,124 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agv-forge.com/schemas/system2.knowledge_explainer_video.schema.json",
+  "title": "AGV Forge System 2 - Knowledge Explainer Video Schema",
+  "description": "Schema for educational, summary, and explainer content with narrator-first delivery.",
+  "type": "object",
+  "allOf": [
+    { "$ref": "system2.base.schema.json" },
+    {
+      "properties": {
+        "content_mode": { "const": "knowledge_explainer_video" },
+        "blocks": {
+          "type": "array",
+          "description": "Knowledge blocks, usually 2-3 parts including a hook.",
+          "items": { "$ref": "#/definitions/knowledge_block" }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "knowledge_block": {
+      "type": "object",
+      "required": ["block_id", "block_type", "block_title", "scenes"],
+      "properties": {
+        "block_id": { "type": "string" },
+        "block_type": { "type": "string", "enum": ["intro_hook", "summary_part", "cta"] },
+        "block_title": { "type": "string" },
+        "block_hook": { 
+          "type": "string",
+          "description": "Hook text specific to this block (required for summary_part)."
+        },
+        "narration_text": { "type": "string" },
+        "srt_segments": { "type": "array" },
+        "scenes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/knowledge_scene" }
+        }
+      }
+    },
+    "knowledge_scene": {
+      "type": "object",
+      "required": [
+        "scene_id",
+        "scene_order",
+        "scene_purpose",
+        "asset_name",
+        "reference_mode",
+        "flow_build_mode",
+        "visual_intent",
+        "prompt_7_elements_light",
+        "start_ms",
+        "end_ms",
+        "transition_to_next"
+      ],
+      "properties": {
+        "scene_id": { "type": "string" },
+        "scene_order": { "type": "integer", "minimum": 1 },
+        "scene_purpose": {
+          "type": "string",
+          "enum": ["hook", "explanation", "visual_support", "summary", "transition", "cta"]
+        },
+        "asset_name": { "type": "string" },
+        "reference_mode": { "$ref": "system2.base.schema.json#/properties/reference_mode" },
+        "flow_build_mode": { "$ref": "system2.base.schema.json#/properties/flow_build_mode" },
+        "reference_asset_ids": { "type": "array", "items": { "type": "string" } },
+        "visual_intent": {
+          "type": "string",
+          "description": "Clear description of what the visual should communicate or explain."
+        },
+        "continuity_notes": { "type": "string" },
+        "scene_transition_notes": { "type": "string" },
+        "prompt_7_elements_light": { "$ref": "#/definitions/prompt_7_elements_light" },
+        "narration_text": { "type": "string" },
+        "start_ms": { "type": "integer", "minimum": 0 },
+        "end_ms": { "type": "integer", "minimum": 0 },
+        "transition_to_next": { "type": "string", "default": "cut" }
+      }
+    },
+    "prompt_7_elements_light": {
+      "type": "object",
+      "required": ["subject", "environment", "action", "camera", "aesthetics", "technical_constraints", "sound_design"],
+      "properties": {
+        "subject": { "type": "string" },
+        "environment": { "type": "string" },
+        "action": { "type": "string" },
+        "camera": {
+          "type": "object",
+          "required": ["angle", "lens_mm", "framing"],
+          "properties": {
+            "angle": { "type": "string" },
+            "lens_mm": { "type": "string" },
+            "framing": { "type": "string" }
+          }
+        },
+        "aesthetics": {
+          "type": "object",
+          "required": ["style", "color_tone"],
+          "properties": {
+            "style": { "type": "string" },
+            "color_tone": { "type": "string" }
+          }
+        },
+        "technical_constraints": {
+          "type": "object",
+          "required": ["aspect_ratio", "negative_prompt"],
+          "properties": {
+            "aspect_ratio": { "type": "string" },
+            "negative_prompt": { "type": "string" }
+          }
+        },
+        "sound_design": {
+          "type": "object",
+          "required": ["dialogue_hint", "ambient_sound", "sfx"],
+          "properties": {
+            "dialogue_hint": { "type": "string" },
+            "ambient_sound": { "type": "string" },
+            "sfx": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}
