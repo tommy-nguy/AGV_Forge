@@ -10,10 +10,10 @@ from typing import Optional
 
 from forge_core.config import get_config, ForgeConfig
 from forge_core.logging_config import configure_logging, get_logger
+from forge_core.workspace import WorkspaceManager
 from forge_jobs import ChannelManager, JobManager
 from forge_ingest import MediaValidator, MediaNormalizer, TranscriptEngine
 from forge_planner import GeminiPlanner, PlannerValidator, PlannerRepairLoop
-from forge_voice import VoiceRenderEngine
 from forge_image import GeminiImageProvider, AssetManager
 from forge_render import TimelineResolver, MoviePyEngine, ThumbnailGenerator
 from forge_review import ScriptReviewGate, FinalReviewGate
@@ -136,13 +136,14 @@ def job_list(channel: Optional[str]):
 def job_run(job_id: str, skip_review: bool):
     """
     Run the full pipeline for a job.
-    Steps: Ingest → Transcript → Planner → Voice → Image → Render → Review → Publish.
+    Steps: Ingest → Transcript → Planner → Voice (skip) → Image → Render → Review → Publish.
     """
     config = get_config()
     channel_mgr = ChannelManager(config.database_path)
     job_mgr = JobManager(config.database_path, channel_mgr)
     record = job_mgr.get_job(job_id)
     workspace_root = Path(record.workspace_root)
+    wm = WorkspaceManager(config)
 
     click.echo(f"🚀 Running job {job_id}...")
 
@@ -177,8 +178,24 @@ def job_run(job_id: str, skip_review: bool):
     validator_planner = PlannerValidator()
     repair = PlannerRepairLoop(planner, validator_planner)
 
+    import json
+    schema_json = json.dumps(validator_planner.schema, indent=2)
     brief = record.input_assets[0].get("metadata", {}).get("brief", "")
-    prompt = f"Create a video plan for channel '{channel.channel_name}'. Transcript: {transcript['full_text']}. Brief: {brief}"
+    
+    prompt = f"""
+You are an AI video editor. Generate a JSON object strictly conforming to the provided schema.
+Do NOT include markdown code blocks, explanations, or any text outside the JSON.
+Output ONLY the JSON object, starting with {{ and ending with }}.
+
+Schema:
+{schema_json}
+
+Channel: {channel.channel_name}
+Transcript: {transcript['full_text']}
+Brief: {brief}
+
+JSON Output:
+"""
     planner_output = repair.run_with_repair(prompt)
 
     with open(workspace_root / "manifest" / "planner_output.json", "w") as f:
@@ -191,13 +208,14 @@ def job_run(job_id: str, skip_review: bool):
     else:
         job_mgr.update_job_state(job_id, "voice_rendering")
 
-    # --- Step 4: Voice ---
+    # --- Step 4: Voice (ÉP BUỘC SKIP) ---
     click.echo("🔊 Rendering voice...")
-    voice_engine = VoiceRenderEngine(config, workspace_root)
-    master_audio = voice_engine.render_script(
-        planner_output["content_script"]["segments"],
-        planner_output["voice_style"]
-    )
+    from pydub import AudioSegment
+    master_audio = workspace_root / "assets" / "audio" / "master_audio.wav"
+    master_audio.parent.mkdir(parents=True, exist_ok=True)
+    # Tạo audio im lặng 5 giây
+    AudioSegment.silent(duration=5000).export(master_audio, format="wav")
+    click.echo("⏭️  Voice skipped (forced) – audio trống được tạo")
     job_mgr.update_job_state(job_id, "image_generating")
 
     # --- Step 5: Images ---
@@ -237,12 +255,10 @@ def job_run(job_id: str, skip_review: bool):
         job_mgr.update_job_state(job_id, "publishing")
 
     # --- Step 8: Publish ---
-    click.echo("📤 Publishing...")
-    publish_mgr = PublishManager(job_mgr, workspace_root)
-    results = publish_mgr.publish_all()
-    click.echo(f"✅ Publish results: {results}")
+    click.echo("📤 Skipping publish (disabled for test run)...")
     job_mgr.update_job_state(job_id, "published")
     click.echo(f"🎉 Job {job_id} completed!")
+    return
 
 
 @job.command("review")
@@ -257,6 +273,7 @@ def job_review(job_id: str, approve: bool, reject: bool, reason: str):
     job_mgr = JobManager(config.database_path, channel_mgr)
     record = job_mgr.get_job(job_id)
     workspace_root = Path(record.workspace_root)
+    wm = WorkspaceManager(config)
     state = record.current_state
 
     if state == "awaiting_script_review":

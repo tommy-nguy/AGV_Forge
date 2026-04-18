@@ -292,13 +292,14 @@ def load_json(path: Path) -> dict:
         return json.load(f)
 
 def write_json_atomic(path: Path, data: dict):
+    path = Path(path)
     import json
     import tempfile
     import shutil
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix='tmp_', suffix='.json')
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+            json.dump(data, f, indent=2, ensure_ascii=False, default=str)
         shutil.move(tmp, path)
     except Exception:
         if os.path.exists(tmp):

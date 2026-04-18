@@ -1,12 +1,11 @@
 """
-Gemini Imagen API provider (Nano Banana) cho System 1.
+Gemini Imagen API provider (Nano Banana) - Placeholder version for testing.
 """
 
-import time
 from pathlib import Path
 from typing import Optional, Dict, Any
 import structlog
-import google.generativeai as genai
+from PIL import Image, ImageDraw
 
 from .base_provider import BaseImageProvider
 
@@ -14,17 +13,11 @@ logger = structlog.get_logger(__name__)
 
 
 class GeminiImageProvider(BaseImageProvider):
-    """Sử dụng Gemini Imagen để tạo ảnh."""
+    """Tạo ảnh placeholder (đen trắng) thay vì gọi API Gemini thật."""
 
     def __init__(self, config: Dict[str, Any] = None):
         super().__init__(config)
-        self.api_key = self.config.get("api_key")
-        if not self.api_key:
-            raise ValueError("Gemini API key is required")
-        genai.configure(api_key=self.api_key)
-        # Model tạo ảnh của Gemini (có thể thay đổi)
-        self.model_name = self.config.get("model", "imagen-3.0-generate-001")
-        self.model = genai.ImageGenerationModel(self.model_name)
+        logger.warning("GeminiImageProvider is in PLACEHOLDER mode – generating blank images")
 
     def generate_image(
         self,
@@ -34,50 +27,27 @@ class GeminiImageProvider(BaseImageProvider):
         negative_prompt: Optional[str] = None,
         **kwargs
     ) -> Path:
-        """
-        Gọi Gemini Imagen API để tạo ảnh.
-        Lưu ý: Gemini Imagen có thể có giới hạn rate limit.
-        """
+        """Tạo một ảnh đen với text mô tả đơn giản."""
         output_path = output_path.with_suffix(".png")
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Map aspect_ratio sang định dạng Gemini hỗ trợ
-        gemini_aspect = {
-            "16:9": "16:9",
-            "9:16": "9:16",
-            "1:1": "1:1",
-            "4:3": "4:3",
-        }.get(aspect_ratio, "16:9")
+        # Tạo ảnh với kích thước tương ứng aspect ratio
+        if aspect_ratio == "16:9":
+            width, height = 1280, 720
+        elif aspect_ratio == "9:16":
+            width, height = 720, 1280
+        else:
+            width, height = 800, 800
 
-        try:
-            logger.info("Calling Gemini Imagen", prompt=prompt[:50], aspect=gemini_aspect)
-            response = self.model.generate_images(
-                prompt=prompt,
-                number_of_images=1,
-                aspect_ratio=gemini_aspect,
-                negative_prompt=negative_prompt,
-            )
-            if not response or not response.images:
-                raise RuntimeError("Gemini returned no images")
+        img = Image.new('RGB', (width, height), color=(30, 30, 30))
+        draw = ImageDraw.Draw(img)
+        # Viết prompt lên ảnh (cắt ngắn nếu quá dài)
+        text = prompt[:100] + "..." if len(prompt) > 100 else prompt
+        draw.text((20, height // 2), text, fill=(255, 255, 255))
 
-            # Lưu ảnh
-            image = response.images[0]
-            image.save(str(output_path))
-            logger.info("Image generated", path=str(output_path))
-            return output_path
-
-        except Exception as e:
-            logger.exception("Gemini image generation failed")
-            raise RuntimeError(f"Gemini Imagen error: {e}") from e
+        img.save(output_path)
+        logger.info("Placeholder image generated", path=str(output_path))
+        return output_path
 
     def is_available(self) -> bool:
-        """Kiểm tra API key có hợp lệ không (có thể kiểm tra bằng cách gọi thử)."""
-        try:
-            # Gọi một request nhẹ để kiểm tra
-            self.model.generate_images(
-                prompt="test",
-                number_of_images=1,
-            )
-            return True
-        except Exception:
-            return False
+        return True

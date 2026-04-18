@@ -34,7 +34,7 @@ class ForgeConfig:
     )
     """API Key cho Google Gemini (dùng tài khoản cá nhân của người dùng)."""
 
-    gemini_model: str = "gemini-2.0-flash-exp"
+    gemini_model: str = "gemini-flash-latest"
     """Model Gemini sử dụng cho planner."""
 
     # ========== VOICE ==========

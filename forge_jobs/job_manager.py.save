@@ -153,7 +153,6 @@ class JobManager:
             "channel_snapshot_path": str(workspace.channel_snapshot_path),
             "workspace": vars(workspace),
             "metadata": dict(metadata or {}),
-            "state_history": [
                 {
                     "from_state": None,
                     "to_state": JobState.CREATED.value,
@@ -249,17 +248,6 @@ class JobManager:
 
         record = JobRecord(
             job_id=job_id,
-            project_id=resolved_project_id,
-            channel_id=channel.channel_id,
-            current_state=JobState.CREATED.value,
-            progress_percent=progress_for_state(JobState.CREATED),
-            workspace_root=str(workspace.root),
-            manifest_path=str(workspace.job_manifest_path),
-            channel_snapshot_path=str(workspace.channel_snapshot_path),
-            input_assets=copied_assets,
-            created_at=manifest["created_at"],
-            updated_at=manifest["updated_at"],
-        )
         self._persist_job(record)
         return record
 

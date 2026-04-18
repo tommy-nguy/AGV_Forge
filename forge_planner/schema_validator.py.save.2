@@ -1,0 +1,96 @@
+"""
+Validator cho planner output theo 3 lớp: structural, semantic, execution.
+"""
+
+import json
+import jsonschema
+from pathlib import Path
+from typing import Dict, Any, List, Tuple, Optional
+import structlog
+
+logger = structlog.get_logger(__name__)
+
+class ValidationError(Exception):
+    """Lỗi validation."""
+    def __init__(self, message: str, errors: List[Dict[str, Any]]):
+        super().__init__(message)
+        self.errors = errors
+
+
+class PlannerValidator:
+    SCHEMA_PATH = Path(__file__).parent / "schemas" / "planner_output_v1.schema.json"
+
+    def __init__(self):
+        with open(self.SCHEMA_PATH, "r", encoding="utf-8") as f:
+            self.schema = json.load(f)
+
+    def validate_structural(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Kiểm tra cấu trúc JSON theo schema."""
+        validator = jsonschema.Draft7Validator(self.schema)
+        errors = []
+        for error in validator.iter_errors(data):
+            errors.append({
+                "level": "structural",
+                "path": ".".join(str(p) for p in error.path),
+                "message": error.message,
+                "schema_path": list(error.schema_path),
+            })
+        return errors
+
+    def validate_semantic(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Kiểm tra logic nghiệp vụ (timestamp, reference, enum)."""
+        errors = []
+        # Kiểm tra start_ms < end_ms cho tất cả các segment, hook, image_prompts
+        # Hook
+        hook = data.get("hook", {})
+        if hook.get("start_ms", 0) >= hook.get("end_ms", 0):
+            errors.append({"level": "semantic", "path": "hook", "message": "start_ms must be < end_ms"})
+
+        # Script segments
+        for i, seg in enumerate(data.get("content_script", {}).get("segments", [])):
+            if seg.get("start_ms", 0) >= seg.get("end_ms", 0):
+                errors.append({"level": "semantic", "path": f"content_script.segments[{i}]", "message": "start_ms must be < end_ms"})
+
+        # Image prompts
+        for i, img in enumerate(data.get("image_prompts", [])):
+            if img.get("start_ms", 0) >= img.get("end_ms", 0):
+                errors.append({"level": "semantic", "path": f"image_prompts[{i}]", "message": "start_ms must be < end_ms"})
+
+        # Kiểm tra segment_id tham chiếu
+        segment_ids = {seg["segment_id"] for seg in data.get("content_script", {}).get("segments", [])}
+        for i, img in enumerate(data.get("image_prompts", [])):
+            for_seg = img.get("for_segment_id")
+            if for_seg and for_seg not in segment_ids:
+                errors.append({"level": "semantic", "path": f"image_prompts[{i}].for_segment_id", "message": f"segment_id '{for_seg}' not found"})
+
+        return errors
+
+    def validate_execution(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Kiểm tra khả năng thực thi (timeline steps, asset references)."""
+        errors = []
+        timeline = data.get("edit_timeline", [])
+        if not timeline:
+            errors.append({"level": "execution", "path": "edit_timeline", "message": "edit_timeline is empty"})
+        else:
+            # Kiểm tra các step type hợp lệ
+            valid_types = {
+                "video_cut", "video_reorder", "video_trim", "video_speed_change", "freeze_frame",
+                "place_voice_track", "mute_source_audio", "duck_source_audio", "set_audio_gain",
+                "fade_in_audio", "fade_out_audio", "insert_ai_image", "replace_with_ai_image",
+                "zoom_pan_image", "hold_image", "overlay_text", "overlay_thumbnail_text", "overlay_cta",
+                "set_position", "set_scale", "set_opacity", "set_layer_order", "hard_cut", "crossfade",
+                "fade_to_black", "snap_to_scene_cut", "snap_to_silence", "align_to_voice", "extend_to_voice_end"
+            }
+            for i, step in enumerate(timeline):
+                step_type = step.get("type")
+                if step_type not in valid_types:
+                    errors.append({"level": "execution", "path": f"edit_timeline[{i}].type", "message": f"Invalid step type: {step_type}"})
+        return errors
+
+	def validate_all(self, data: Dict[str, Any]) -> Tuple[bool, List[Dict[str, Any]]]:
+        """Chạy cả 3 lớp validation, trả về (passed, errors)."""
+        errors = []
+        errors.extend(self.validate_structural(data))
+        errors.extend(self.validate_semantic(data))
+        errors.extend(self.validate_execution(data))
+        return len(errors) == 0, errors
