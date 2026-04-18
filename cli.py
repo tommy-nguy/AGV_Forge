@@ -1,73 +1,289 @@
 #!/usr/bin/env python3
-"""AGV Forge CLI - Command line interface for the video automation pipeline."""
+"""
+AGV Forge CLI - Command line interface for the video automation pipeline.
+"""
 
 import click
+import json
 from pathlib import Path
-from forge_core.config import get_config
-from forge_jobs.channel_manager import ChannelManager
-from forge_jobs.job_manager import JobManager
+from typing import Optional
+
+from forge_core.config import get_config, ForgeConfig
+from forge_core.logging_config import configure_logging, get_logger
+from forge_jobs import ChannelManager, JobManager
+from forge_ingest import MediaValidator, MediaNormalizer, TranscriptEngine
+from forge_planner import GeminiPlanner, PlannerValidator, PlannerRepairLoop
+from forge_voice import VoiceRenderEngine
+from forge_image import GeminiImageProvider, AssetManager
+from forge_render import TimelineResolver, MoviePyEngine, ThumbnailGenerator
+from forge_review import ScriptReviewGate, FinalReviewGate
+from forge_publish import PublishManager
+
+logger = get_logger(__name__)
+
 
 @click.group()
-def cli():
+@click.option("--debug", is_flag=True, help="Enable debug logging.")
+def cli(debug: bool):
     """AGV Forge - Automated Video Factory"""
-    pass
+    log_level = "DEBUG" if debug else "INFO"
+    configure_logging(log_level=log_level)
+    get_config()
 
+
+# ------------------- Channel Commands -------------------
 @cli.group()
 def channel():
     """Manage channel profiles."""
     pass
 
+
 @channel.command("create")
-@click.option("--name", prompt=True)
-@click.option("--language", prompt=True)
-@click.option("--storage", prompt=True, help="Storage root path")
-def channel_create(name, language, storage):
-    """Create a new channel."""
+@click.option("--name", prompt=True, help="Channel name.")
+@click.option("--language", prompt=True, help="Language code (vi, en).")
+@click.option("--storage", prompt=True, help="Storage root path.")
+@click.option("--category", default="", help="Channel category.")
+@click.option("--voice-mode", default="trained_brand_voice",
+              help="Voice mode (trained_brand_voice, manual_audio_import, skip_voice).")
+def channel_create(name: str, language: str, storage: str, category: str, voice_mode: str):
+    """Create a new channel profile."""
     config = get_config()
     mgr = ChannelManager(config.database_path)
+    storage_path = Path(storage).expanduser().resolve()
+    log_root = storage_path / "logs"
+
     channel = mgr.create_channel(
         channel_name=name,
         channel_language=language,
-        storage_root=storage,
-        log_root=str(Path(storage) / "logs"),
-        default_background_sound_id="bg_default"
+        channel_category=category,
+        storage_root=str(storage_path),
+        log_root=str(log_root),
+        default_background_sound_id="bg_default",
+        default_publish_timezone="Asia/Ho_Chi_Minh",
+        default_voice_mode=voice_mode,
     )
-    click.echo(f"Channel created: {channel.channel_id}")
+    click.echo(f"✅ Channel created: {channel.channel_id}")
+    click.echo(f"   Name: {channel.channel_name}")
+    click.echo(f"   Language: {channel.channel_language}")
+    click.echo(f"   Storage: {channel.storage_root}")
+
 
 @channel.command("list")
 def channel_list():
     """List all channels."""
     config = get_config()
     mgr = ChannelManager(config.database_path)
-    for ch in mgr.list_channels():
-        status = "✅" if ch.is_active else "❌"
-        click.echo(f"{status} {ch.channel_id} - {ch.channel_name} ({ch.channel_language})")
+    channels = mgr.list_channels(include_inactive=True)
+    if not channels:
+        click.echo("No channels found.")
+        return
+    for ch in channels:
+        status = "🟢" if ch.is_active else "🔴"
+        click.echo(f"{status} {ch.channel_id} | {ch.channel_name} ({ch.channel_language})")
 
+
+# ------------------- Job Commands -------------------
 @cli.group()
 def job():
     """Manage processing jobs."""
     pass
 
+
 @job.command("create")
-@click.option("--channel", required=True)
+@click.option("--channel", required=True, help="Channel ID.")
+@click.option("--brief", default="", help="Brief description for planner.")
 @click.argument("input_files", nargs=-1, required=True)
-def job_create(channel, input_files):
+def job_create(channel: str, brief: str, input_files: tuple):
     """Create a new job from input files."""
     config = get_config()
     channel_mgr = ChannelManager(config.database_path)
     job_mgr = JobManager(config.database_path, channel_mgr)
-    record = job_mgr.create_job(channel, list(input_files))
-    click.echo(f"Job created: {record.job_id}")
+
+    metadata = {"brief": brief} if brief else {}
+    record = job_mgr.create_job(
+        channel_id=channel,
+        input_assets=list(input_files),
+        metadata=metadata,
+    )
+    click.echo(f"✅ Job created: {record.job_id}")
+    click.echo(f"   Channel: {record.channel_id}")
+    click.echo(f"   Workspace: {record.workspace_root}")
+
 
 @job.command("list")
-@click.option("--channel", default=None)
-def job_list(channel):
+@click.option("--channel", default=None, help="Filter by channel ID.")
+def job_list(channel: Optional[str]):
     """List jobs."""
     config = get_config()
     channel_mgr = ChannelManager(config.database_path)
     job_mgr = JobManager(config.database_path, channel_mgr)
-    for job in job_mgr.list_jobs(channel):
-        click.echo(f"{job.job_id} - {job.current_state} ({job.progress_percent}%)")
+    jobs = job_mgr.list_jobs(channel)
+    if not jobs:
+        click.echo("No jobs found.")
+        return
+    for job in jobs:
+        state_color = {
+            "published": "🟢",
+            "failed": "🔴",
+            "archived": "⚫",
+        }.get(job.current_state, "🟡")
+        click.echo(f"{state_color} {job.job_id} | {job.current_state} ({job.progress_percent}%) | {job.channel_id}")
+
+
+@job.command("run")
+@click.argument("job_id")
+@click.option("--skip-review", is_flag=True, help="Skip review gates (auto-approve).")
+def job_run(job_id: str, skip_review: bool):
+    """
+    Run the full pipeline for a job.
+    Steps: Ingest → Transcript → Planner → Voice → Image → Render → Review → Publish.
+    """
+    config = get_config()
+    channel_mgr = ChannelManager(config.database_path)
+    job_mgr = JobManager(config.database_path, channel_mgr)
+    record = job_mgr.get_job(job_id)
+    workspace_root = Path(record.workspace_root)
+
+    click.echo(f"🚀 Running job {job_id}...")
+
+    # --- Step 1: Ingest & Normalize ---
+    click.echo("📁 Ingesting media...")
+    job_mgr.update_job_state(job_id, "ingesting")
+    validator = MediaValidator()
+    normalizer = MediaNormalizer()
+
+    input_assets = record.input_assets
+    raw_video = Path(input_assets[0]["workspace_path"])
+    norm_video = workspace_root / "working" / "normalized_video.mp4"
+    ext_audio = workspace_root / "working" / "extracted_audio.wav"
+
+    media_info = validator.validate(raw_video)
+    normalizer.normalize_video(raw_video, norm_video)
+    normalizer.extract_audio(raw_video, ext_audio)
+
+    job_mgr.update_job_state(job_id, "transcribing")
+
+    # --- Step 2: Transcript ---
+    click.echo("🎤 Transcribing audio...")
+    transcript_engine = TranscriptEngine(model_name="base")
+    transcript = transcript_engine.transcribe(ext_audio, language="vi")
+    transcript_engine.save_transcript_json(transcript, workspace_root / "working" / "transcript.json")
+    job_mgr.update_job_state(job_id, "planning")
+
+    # --- Step 3: Planner ---
+    click.echo("🧠 Planning with Gemini...")
+    channel = channel_mgr.get_channel(record.channel_id)
+    planner = GeminiPlanner(config)
+    validator_planner = PlannerValidator()
+    repair = PlannerRepairLoop(planner, validator_planner)
+
+    brief = record.input_assets[0].get("metadata", {}).get("brief", "")
+    prompt = f"Create a video plan for channel '{channel.channel_name}'. Transcript: {transcript['full_text']}. Brief: {brief}"
+    planner_output = repair.run_with_repair(prompt)
+
+    with open(workspace_root / "manifest" / "planner_output.json", "w") as f:
+        json.dump(planner_output, f, indent=2)
+    job_mgr.update_job_state(job_id, "awaiting_script_review")
+
+    if not skip_review:
+        click.echo("⏸️  Job paused for script review. Use 'job review' command.")
+        return
+    else:
+        job_mgr.update_job_state(job_id, "voice_rendering")
+
+    # --- Step 4: Voice ---
+    click.echo("🔊 Rendering voice...")
+    voice_engine = VoiceRenderEngine(config, workspace_root)
+    master_audio = voice_engine.render_script(
+        planner_output["content_script"]["segments"],
+        planner_output["voice_style"]
+    )
+    job_mgr.update_job_state(job_id, "image_generating")
+
+    # --- Step 5: Images ---
+    click.echo("🎨 Generating images...")
+    image_provider = GeminiImageProvider({"api_key": config.gemini_api_key})
+    asset_mgr = AssetManager(workspace_root)
+    for img_prompt in planner_output["image_prompts"]:
+        temp = workspace_root / "working" / f"{img_prompt['asset_id']}.png"
+        image_provider.generate_image(
+            prompt=img_prompt["prompt"],
+            output_path=temp,
+            aspect_ratio=img_prompt.get("aspect_ratio", "16:9"),
+            negative_prompt=img_prompt.get("negative_prompt"),
+        )
+        asset_mgr.register_image(img_prompt["asset_id"], temp, img_prompt)
+    job_mgr.update_job_state(job_id, "rendering")
+
+    # --- Step 6: Render ---
+    click.echo("🎬 Rendering video...")
+    resolver = TimelineResolver(workspace_root, asset_mgr)
+    resolved = resolver.resolve(planner_output, master_audio)
+    render_engine = MoviePyEngine(workspace_root)
+    final_video = render_engine.render(resolved)
+    job_mgr.update_job_state(job_id, "awaiting_final_review")
+
+    # --- Step 7: Thumbnail ---
+    thumb_gen = ThumbnailGenerator(image_provider, asset_mgr)
+    thumbnail = thumb_gen.generate(
+        planner_output["thumbnail_prompt"],
+        planner_output.get("thumbnail_text")
+    )
+
+    if not skip_review:
+        click.echo(f"⏸️  Job {job_id} ready for final review. Video: {final_video}")
+        return
+    else:
+        job_mgr.update_job_state(job_id, "publishing")
+
+    # --- Step 8: Publish ---
+    click.echo("📤 Publishing...")
+    publish_mgr = PublishManager(job_mgr, workspace_root)
+    results = publish_mgr.publish_all()
+    click.echo(f"✅ Publish results: {results}")
+    job_mgr.update_job_state(job_id, "published")
+    click.echo(f"🎉 Job {job_id} completed!")
+
+
+@job.command("review")
+@click.argument("job_id")
+@click.option("--approve", is_flag=True, help="Approve current review step.")
+@click.option("--reject", is_flag=True, help="Reject and route back.")
+@click.option("--reason", default="", help="Reason for rejection.")
+def job_review(job_id: str, approve: bool, reject: bool, reason: str):
+    """Review a job at script or final stage."""
+    config = get_config()
+    channel_mgr = ChannelManager(config.database_path)
+    job_mgr = JobManager(config.database_path, channel_mgr)
+    record = job_mgr.get_job(job_id)
+    workspace_root = Path(record.workspace_root)
+    state = record.current_state
+
+    if state == "awaiting_script_review":
+        gate = ScriptReviewGate(job_mgr, workspace_root)
+        if approve:
+            gate.approve()
+            click.echo("✅ Script approved. Moving to voice stage.")
+        elif reject:
+            gate.reject(reason)
+            click.echo(f"❌ Script rejected: {reason}")
+        else:
+            script = gate.get_current_script()
+            click.echo(json.dumps(script["content_script"], indent=2))
+    elif state == "awaiting_final_review":
+        gate = FinalReviewGate(job_mgr, workspace_root)
+        if approve:
+            gate.approve()
+            click.echo("✅ Final video approved. Publishing...")
+        elif reject:
+            gate.reject(reason, edit_issue=True)
+            click.echo(f"❌ Final video rejected: {reason}")
+        else:
+            video_path = gate.get_video_path()
+            click.echo(f"Video ready at: {video_path}")
+    else:
+        click.echo(f"Job is not in a review state (current: {state})")
+
 
 if __name__ == "__main__":
     cli()
