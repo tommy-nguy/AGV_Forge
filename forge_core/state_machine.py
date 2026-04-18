@@ -233,3 +233,37 @@ def get_state_group(state: JobState) -> str:
         if state in states:
             return group_name
     return "unknown"
+def progress_for_state(state: JobState) -> int:
+    """Trả về phần trăm tiến trình ước tính cho mỗi trạng thái."""
+    progress_map = {
+        JobState.CREATED: 0,
+        JobState.INGESTING: 5,
+        JobState.NORMALIZING: 10,
+        JobState.TRANSCRIBING: 20,
+        JobState.PLANNING: 30,
+        JobState.AWAITING_SCRIPT_REVIEW: 40,
+        JobState.VOICE_PREPARING: 45,
+        JobState.VOICE_TRAINING: 50,
+        JobState.VOICE_RENDERING: 60,
+        JobState.IMAGE_GENERATING: 70,
+        JobState.TIMELINE_REFINING: 80,
+        JobState.RENDERING: 90,
+        JobState.AWAITING_FINAL_REVIEW: 95,
+        JobState.SCHEDULED: 98,
+        JobState.PUBLISHING: 99,
+        JobState.PUBLISHED: 100,
+        JobState.PARTIAL_FAILED: 100,
+        JobState.FAILED: 100,
+        JobState.ARCHIVED: 100,
+    }
+    return progress_map.get(state, 0)
+
+
+def validate_transition(current: str | JobState, next_state: str | JobState) -> bool:
+    """Kiểm tra xem có thể chuyển từ current sang next_state không."""
+    if isinstance(current, str):
+        current = JobState(current)
+    if isinstance(next_state, str):
+        next_state = JobState(next_state)
+    sm = JobStateMachine(current)
+    return sm.can_transition_to(next_state)

@@ -1,3 +1,4 @@
+import os, shutil, hashlib, json
 """
 AGV Forge - Workspace Manager
 Quản lý cấu trúc thư mục chuẩn cho mỗi job theo Mục 15 của đặc tả.
@@ -237,3 +238,85 @@ class WorkspaceManager:
     def job_exists(self, job_id: str) -> bool:
         """Kiểm tra job_id đã tồn tại chưa."""
         return (self.root / job_id).exists()
+# ========== Compatibility wrappers for job_manager.py ==========
+def create_job_workspace(storage_root: str, project_id: str, job_id: str):
+    """Tạo workspace và trả về đối tượng WorkspacePaths (tạm)."""
+    from pathlib import Path
+    wm = WorkspaceManager()
+    # WorkspaceManager hiện chỉ nhận config, ta cần tạo config tạm hoặc truyền storage_root
+    # Tạm thời tạo workspace thủ công và trả về cấu trúc paths
+    root = Path(storage_root).expanduser().resolve() / "projects" / project_id / job_id
+    root.mkdir(parents=True, exist_ok=True)
+    paths = {
+        'root': root,
+        'manifest': root / 'manifest',
+        'input': root / 'input',
+        'working': root / 'working',
+        'assets': root / 'assets',
+        'output': root / 'output',
+        'logs': root / 'logs',
+    }
+    for p in paths.values():
+        p.mkdir(exist_ok=True)
+    # Trả về một namespace đơn giản
+    from types import SimpleNamespace
+    return SimpleNamespace(**paths, 
+                           job_manifest_path=paths['manifest'] / 'job_manifest.json',
+                           channel_snapshot_path=paths['manifest'] / 'channel_snapshot.json',
+                           planner_output_path=paths['manifest'] / 'planner_output.json',
+                           timeline_final_path=paths['manifest'] / 'timeline_final.json')
+
+def copy_input_asset(source: Path, dest_dir: Path) -> dict:
+    """Copy file nguồn vào thư mục đích, trả về thông tin asset."""
+    import shutil
+    import hashlib
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = dest_dir / source.name
+    shutil.copy2(source, dest_path)
+    # Tính hash
+    sha256 = hashlib.sha256()
+    with open(dest_path, 'rb') as f:
+        for chunk in iter(lambda: f.read(65536), b''):
+            sha256.update(chunk)
+    return {
+        'original_path': str(source),
+        'workspace_path': str(dest_path),
+        'file_name': source.name,
+        'size_bytes': dest_path.stat().st_size,
+        'sha256': sha256.hexdigest()
+    }
+
+def load_json(path: Path) -> dict:
+    import json
+    with open(path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+def write_json_atomic(path: Path, data: dict):
+    import json
+    import tempfile
+    import shutil
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix='tmp_', suffix='.json')
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        shutil.move(tmp, path)
+    except Exception:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+class WorkspacePaths:
+    """Lớp giả để tương thích."""
+    def __init__(self, root):
+        self.root = root
+        self.job_manifest_path = root / 'manifest' / 'job_manifest.json'
+        self.channel_snapshot_path = root / 'manifest' / 'channel_snapshot.json'
+        self.planner_output_path = root / 'manifest' / 'planner_output.json'
+        self.timeline_final_path = root / 'manifest' / 'timeline_final.json'
+        self.input_dir = root / 'input'
+        self.working_dir = root / 'working'
+        self.assets_dir = root / 'assets'
+        self.output_dir = root / 'output'
+        self.logs_dir = root / 'logs'
+    def to_dict(self):
+        return {k: str(v) for k, v in self.__dict__.items() if not k.startswith('_')}
