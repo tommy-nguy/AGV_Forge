@@ -24,7 +24,7 @@ class ForgeConfig:
 
     # ========== LƯU TRỮ ==========
     storage_root: Path = field(
-        default_factory=lambda: Path.home() / "AGV_Forge_Data"
+        default_factory=lambda: Path.home() / "AGV_forge_Data"
     )
     """Thư mục gốc chứa toàn bộ dữ liệu: channels, projects, logs."""
 
